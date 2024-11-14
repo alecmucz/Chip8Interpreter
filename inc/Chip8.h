@@ -8,11 +8,20 @@
 #include <iostream>
 #include <cstring>
 #include <cstdint>
+#include <iomanip>
+#include <cstdlib>
+#define BLUE    "\033[34m"
+#define YELLOW  "\033[33m"
+#define GREEN   "\033[32m"
+#define RESET   "\033[0m"
+
+
+using namespace std;
 
 class Chip8 {
 private:
     uint8_t memory[4096];
-    uint8_t display[64][32];    //possibly change to 1d array, see if/how 2d works with SDL
+    uint8_t display[64 * 32];    //possibly change to 1d array, see if/how 2d works with SDL
     uint8_t keypad[16];
     uint8_t gpr[16];
     uint16_t opcode;
@@ -41,9 +50,12 @@ private:
             0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
             0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
+private:
+    void memDump();
 
 public:
-    void Initialize();
+    void init();
+    [[noreturn]] void executionCycle();
 };
 
 #endif //CHIP8INTERPRETER_CHIP8_H
