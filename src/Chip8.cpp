@@ -3,7 +3,13 @@
 //
 #include "../inc/Chip8.h"
 
-void Chip8::init() {
+void Chip8::init(const char* path) {
+
+    SDL_Init(SDL_INIT_VIDEO);
+    window = SDL_CreateWindow("Chip8 Emulator", 640, 320, 0);
+    if (window == nullptr) SDL_LogError(SDL_LOG_CATEGORY_ERROR, "%s", SDL_GetError());
+    //SDL_Delay(15000);
+
     memset(memory,0,sizeof(memory));
     memset(display,0,sizeof(display));
     memset(keypad,0,sizeof(keypad));
@@ -19,6 +25,8 @@ void Chip8::init() {
 
     srand(time(nullptr)); // NOLINT(*-msc51-cpp)
 
+    loadRom(path);
+
     for (int j = 0; j < sizeof(fonts) / sizeof(fonts[0]); j++){
         memory[j + 0x050] = fonts[j];
     }
@@ -27,7 +35,6 @@ void Chip8::init() {
 
 [[noreturn]] void Chip8::executionCycle() {
     while(true){
-
         // *FETCH* : Retrieves the next 16bit instruction in the program counter
         uint16_t inst = (memory[pc] << 8 | memory[pc+1]);
         pc+=2;
@@ -49,8 +56,7 @@ void Chip8::init() {
                         pc = stack[sp--];
                         break;
                     default:
-                        memDump();
-                        exit(1);
+                        memDump(1);
                 }
                 break;
             case 0x1000:    // JP : Jump to Location nnn
@@ -95,9 +101,23 @@ void Chip8::init() {
                     case 0x0003:    //8xy3
                         gpr[x] = gpr[x] ^ gpr[y];
                         break;
+                    case 0x0004:    //8xy4
+                        gpr[x] = gpr[x] + gpr[y];
+                        break;
+                    case 0x0005:    //8xy5
+                        gpr[x] = gpr[x] - gpr[y];
+                        break;
+                    case 0x0006:    //8xy6
+                        gpr[x] = gpr[x] + gpr[y];
+                        break;
+                    case 0x0007:    //8xy7
+                        gpr[x] = gpr[y] - gpr[x];
+                        break;
+                    case 0x000E:    //8xy8
+                        gpr[x] = gpr[x] + gpr[y];
+                        break;
                     default:
-                        memDump();
-                        exit(1);
+                        memDump(1);
                 }
                 break;
             case 0xA000:    //Set Index Register
@@ -113,8 +133,6 @@ void Chip8::init() {
 
                 break;
             case 0xE000:    //Key Operations
-
-
                 break;
             case 0xF000:    //Timer Sound Memory Operations
                 switch (nn) {
@@ -144,20 +162,18 @@ void Chip8::init() {
                         }
                         break;
                     default:
-                        memDump();
-                        exit(1);
+                        memDump(1);
                 }
                 break;
-
             default:
-                memDump();
-                exit(1);
-        }
+                memDump(1);
 
+        }
     }
 }
 
-void Chip8::memDump() {
+void Chip8::memDump(int exitFlag) {
+
     cout << "Memory Dump:" << endl;
 
     for (int j = 0; j < 4096; j += 16) {
@@ -175,5 +191,24 @@ void Chip8::memDump() {
         cout << RESET << "| " << setw(4)<< setfill('0') << dec << j << "-" << setw(4)<< setfill('0') << j+15;
         cout << endl;
     }
+    if (exitFlag > 0){
+        exit(exitFlag);
+    }
 }
 
+void Chip8::loadRom(const string& path) {
+    ifstream inFile;
+
+    inFile.open(path, ios::binary | ios::in);
+    if (!inFile) {
+        std::cerr << "Failed to open config file: " << path << std::endl;
+        return;
+    }
+
+    inFile.seekg(0, ios::end);
+    streamsize fileSize = inFile.tellg();
+    inFile.seekg(0, ios::beg);
+
+    inFile.read(reinterpret_cast<char *>(&memory[0x200]), fileSize);
+
+}
