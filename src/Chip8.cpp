@@ -5,11 +5,8 @@
 
 void Chip8::init(const char* path) {
 
-    SDL_Init(SDL_INIT_VIDEO);
-    window = SDL_CreateWindow("Chip8 Emulator", 640, 320, 0);
-    if (window == nullptr) SDL_LogError(SDL_LOG_CATEGORY_ERROR, "%s", SDL_GetError());
-    //SDL_Delay(15000);
-
+    InitWindow(640, 320, "Chip8Interpreter");
+    SetTargetFPS(60);
     memset(memory,0,sizeof(memory));
     memset(display,0,sizeof(display));
     memset(keypad,0,sizeof(keypad));
@@ -33,24 +30,25 @@ void Chip8::init(const char* path) {
 
 }
 
-[[noreturn]] void Chip8::executionCycle() {
-    while(true){
+void Chip8::executionCycle() {
+    while (!WindowShouldClose()) {
+
         // *FETCH* : Retrieves the next 16bit instruction in the program counter
-        uint16_t inst = (memory[pc] << 8 | memory[pc+1]);
-        pc+=2;
+        uint16_t inst = (memory[pc] << 8 | memory[pc + 1]);
+        pc += 2;
         // *DECODE*
         opcode = inst & 0xF000;
-        uint8_t x = (inst & 0x0F00) >> 8;
-        uint8_t y = (inst & 0x00F0) >> 4;
-        uint8_t n = inst & 0x000F;
-        uint8_t nn = inst & 0x00FF;
-        uint8_t nnn = inst & 0x0FFF;
+        uint8_t X = (inst & 0x0F00) >> 8;
+        uint8_t Y = (inst & 0x00F0) >> 4;
+        uint8_t N = inst & 0x000F;
+        uint8_t NN = inst & 0x00FF;
+        uint8_t NNN = inst & 0x0FFF;
         // *EXECUTE*
         switch (opcode) {
             case 0x0000:    //system calls
-                switch (nn) {
+                switch (NN) {
                     case 0x00E0:    // CLS : Clear the Display
-                        memset(display,0,sizeof(display));
+                        memset(display, 0, sizeof(display));
                         break;
                     case 0x00EE:    // RET : Return from a Subroutine
                         pc = stack[sp--];
@@ -59,105 +57,121 @@ void Chip8::init(const char* path) {
                         memDump(1);
                 }
                 break;
-            case 0x1000:    // JP : Jump to Location nnn
-                pc = nnn;
+            case 0x1000:    // JP : Jump to Location NNN
+                pc = NNN;
                 break;
-            case 0x2000:    //CALL : Call Subroutine at nnn
+            case 0x2000:    //CALL : Call Subroutine at NNN
                 stack[sp++] = pc;
-                pc = nnn;
+                pc = NNN;
                 break;
             case 0x3000:    //Conditional Skip
-                if (gpr[x] == gpr[nn]){
-                    pc+=2;
+                if (gpr[X] == gpr[NN]) {
+                    pc += 2;
                 }
                 break;
             case 0x4000:    //Conditional Skip
-                if (gpr[x] != gpr[nn]){
-                    pc+=2;
+                if (gpr[X] != gpr[NN]) {
+                    pc += 2;
                 }
                 break;
             case 0x5000:
-                if (gpr[x] == gpr[y]){
-                    pc+=2;
+                if (gpr[X] == gpr[Y]) {
+                    pc += 2;
                 }
                 break;
             case 0x6000:    //Register Operations
-                gpr[x] = nn;
+                gpr[X] = NN;
                 break;
             case 0x7000:    //Add Operation
-                gpr[x] += nn;
+                gpr[X] += NN;
                 break;
             case 0x8000:    //Arithmetic And BitWise Operations
-                switch (n) {
+                switch (N) {
                     case 0x0000:    //8xy0
-                        gpr[x] = gpr[y];
+                        gpr[X] = gpr[Y];
                         break;
                     case 0x0001:    //8xy1
-                        gpr[x] = gpr[x] | gpr[y];
+                        gpr[X] = gpr[X] | gpr[Y];
                         break;
                     case 0x0002:    //8xy2
-                        gpr[x] = gpr[x] & gpr[y];
+                        gpr[X] = gpr[X] & gpr[Y];
                         break;
                     case 0x0003:    //8xy3
-                        gpr[x] = gpr[x] ^ gpr[y];
+                        gpr[X] = gpr[X] ^ gpr[Y];
                         break;
                     case 0x0004:    //8xy4
-                        gpr[x] = gpr[x] + gpr[y];
+                        gpr[X] = gpr[X] + gpr[Y];
                         break;
                     case 0x0005:    //8xy5
-                        gpr[x] = gpr[x] - gpr[y];
+                        gpr[X] = gpr[X] - gpr[Y];
                         break;
                     case 0x0006:    //8xy6
-                        gpr[x] = gpr[x] + gpr[y];
+                        gpr[X] = gpr[X] + gpr[Y];
                         break;
                     case 0x0007:    //8xy7
-                        gpr[x] = gpr[y] - gpr[x];
+                        gpr[X] = gpr[Y] - gpr[X];
                         break;
                     case 0x000E:    //8xy8
-                        gpr[x] = gpr[x] + gpr[y];
+                        gpr[X] = gpr[X] + gpr[Y];
                         break;
                     default:
                         memDump(1);
                 }
                 break;
             case 0xA000:    //Set Index Register
-                i = nnn;
+                i = NNN;
                 break;
             case 0xB000:    //Jump with Offset
-                pc = nnn + gpr[0];
+                pc = NNN + gpr[0];
                 break;
             case 0xC000:    //Random Number (mask)
-                gpr[x] = uint8_t(rand()) & nn;
+                gpr[X] = uint8_t(rand()) & NN;
                 break;
-            case 0xD000:    //Draw Sprite
-
+            case 0xD000: {  //Draw Sprite
+                uint8_t x_cord = gpr[X] & 63;
+                uint8_t y_cord = gpr[Y] & 31;
+                gpr[15] = 0;
+                for (int row = 0; row < N; row++) {
+                    uint8_t sprite_byte = memory[i + row];
+                    for (int col = 0; col < 8; col++) {
+                        uint8_t sprite_bit = sprite_byte & (0x80 >> col);
+                        if (sprite_bit) {
+                            int pixel_index = ((y_cord + row) % 32) * 64 + ((x_cord + col) % 64);
+                            if (display[pixel_index]) {
+                                gpr[15] = 1;
+                            }
+                            display[pixel_index] ^= 1;
+                        }
+                    }
+                }
                 break;
+            }
             case 0xE000:    //Key Operations
                 break;
             case 0xF000:    //Timer Sound Memory Operations
-                switch (nn) {
+                switch (NN) {
                     case 0x0007:
-                        gpr[x] = delayTimer;
+                        gpr[X] = delayTimer;
                         break;
-                    case 0x000A:    //implement busy waiting for a keypress and store the value in gpr[x] ; shit implementation, needs fixing
+                    case 0x000A:    //implement busy waiting for a keypress and store the value in gpr[X] ;
 
                         break;
                     case 0x0015:
-                        delayTimer = gpr[x];
+                        delayTimer = gpr[X];
                         break;
                     case 0x0018:
-                        soundTimer = gpr[x];
+                        soundTimer = gpr[X];
                         break;
                     case 0x001E:
-                        i += gpr[x];
+                        i += gpr[X];
                         break;
                     case 0x0055:
-                        for(int index = 0; index <= x; index++){
+                        for (int index = 0; index <= X; index++) {
                             memory[i + index] = gpr[index];
                         }
                         break;
                     case 0x0065:
-                        for(int index = 0; index <= x; index++){
+                        for (int index = 0; index <= X; index++) {
                             gpr[index] = memory[i + index];
                         }
                         break;
@@ -169,22 +183,37 @@ void Chip8::init(const char* path) {
                 memDump(1);
 
         }
+
+        BeginDrawing();
+        int scale = 10;
+        ClearBackground(WHITE);
+
+        for (int x = 0; x < 64; x++) {
+            for (int y = 0; y < 32; y++) {
+                if (display[y * 64 + x]) {
+                    DrawRectangle(x * scale, y * scale, scale, scale, BLACK);
+                }
+            }
+        }
+        EndDrawing();
     }
 }
 
 void Chip8::memDump(int exitFlag) {
 
     cout << "Memory Dump:" << endl;
+    cout << "Opcode: " << setw(4) << setfill('0') << hex << opcode << endl;
+    cout << "Program Counter:" << setw(4) << setfill('0') << hex << pc << endl;
 
     for (int j = 0; j < 4096; j += 16) {
         cout << "0x" << setw(4) << setfill('0') << hex << j << " | ";
         for (int k = 0; k < 16; ++k) {
             if (memory[j + k] == 0x00) {
-                cout << BLUE;
-            } else if (j + k >= 0x0200 && memory[j+k] != 0x00) {
-                cout << GREEN;
+                cout << MY_BLUE;
+            } else if (j + k >= 0x0200) {
+                cout << MY_GREEN;
             }else {
-                cout << YELLOW;
+                cout << MY_YELLOW;
             }
             cout << setw(2) << setfill('0') << (int)memory[j + k] << " ";
         }
@@ -209,6 +238,16 @@ void Chip8::loadRom(const string& path) {
     streamsize fileSize = inFile.tellg();
     inFile.seekg(0, ios::beg);
 
+    if (fileSize > 4096 - 0x200){
+        cerr << "ROM File is too Large for Address Space" << endl;
+    }
+
     inFile.read(reinterpret_cast<char *>(&memory[0x200]), fileSize);
+
+    if (!inFile){
+        cerr << "Error Occurred while reading File" << endl;
+    } else {
+        cout << "Successfully Loaded ROM File" << endl;
+    }
 
 }
