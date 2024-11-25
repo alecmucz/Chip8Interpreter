@@ -20,7 +20,7 @@ void Chip8::init(const char* path) {
     soundTimer = 0;
     pc = 0x200;
 
-    srand(time(nullptr)); // NOLINT(*-msc51-cpp)
+    srand(time(nullptr));
 
     loadRom(path);
 
@@ -32,7 +32,6 @@ void Chip8::init(const char* path) {
 
 void Chip8::executionCycle() {
     while (!WindowShouldClose()) {
-
         // *FETCH* : Retrieves the next 16bit instruction in the program counter
         uint16_t inst = (memory[pc] << 8 | memory[pc + 1]);
         pc += 2;
@@ -54,7 +53,7 @@ void Chip8::executionCycle() {
                         pc = stack[sp--];
                         break;
                     default:
-                        memDump(1);
+                        memDump(0);
                 }
                 break;
             case 0x1000:    // JP : Jump to Location NNN
@@ -115,7 +114,7 @@ void Chip8::executionCycle() {
                         gpr[X] = gpr[X] + gpr[Y];
                         break;
                     default:
-                        memDump(1);
+                        memDump(0);
                 }
                 break;
             case 0xA000:    //Set Index Register
@@ -147,15 +146,39 @@ void Chip8::executionCycle() {
                 break;
             }
             case 0xE000:    //Key Operations
+                switch (NN) {
+                    case 0x009E:
+                        if (IsKeyPressed(gpr[X])) {
+                            pc += 2;
+                        }
+                        break;
+
+                    case 0x00A1:
+                        if (!IsKeyPressed(gpr[X])) {
+                            pc += 2;
+                        }
+                        break;
+                    default:
+                        memDump(0);
+                }
                 break;
             case 0xF000:    //Timer Sound Memory Operations
                 switch (NN) {
                     case 0x0007:
                         gpr[X] = delayTimer;
                         break;
-                    case 0x000A:    //implement busy waiting for a keypress and store the value in gpr[X] ;
-
+                    case 0x000A: {    //implement busy waiting for a keypress and store the value in gpr[X] ;
+                        uint8_t keyPressed = 0;
+                        while (!keyPressed) {
+                            for (unsigned char index : keypad) {
+                                if (IsKeyPressed(index)) {
+                                    keyPressed = 1;
+                                    gpr[X] = GetKeyPressed();
+                                }
+                            }
+                        }
                         break;
+                    }
                     case 0x0015:
                         delayTimer = gpr[X];
                         break;
@@ -176,12 +199,11 @@ void Chip8::executionCycle() {
                         }
                         break;
                     default:
-                        memDump(1);
+                        memDump(0);
                 }
                 break;
             default:
                 memDump(1);
-
         }
 
         BeginDrawing();
